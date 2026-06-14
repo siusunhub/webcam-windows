@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -9,6 +9,7 @@ using OpenCvSharp;
 using OpenCvSharp.Extensions;
 using DirectShowLib;
 using Size = OpenCvSharp.Size;
+using System.Text.Json;
 
 namespace WebcamWindows
 {
@@ -29,6 +30,9 @@ namespace WebcamWindows
 
     public partial class MainForm : Form
     {
+
+        private string version = "0.3";
+
         // Core components
         private VideoCapture videoCapture;
         private Timer frameTimer;
@@ -42,6 +46,9 @@ namespace WebcamWindows
         private int currentDeviceIndex = 0;
         private string currentWebcamName = "";
         private HashSet<int> failedWebcamIndices = new HashSet<int>();
+        private string savedWebcamName = null;
+        private int savedWidth = 0;
+        private int savedHeight = 0;
         
         // Window state management
         private bool isWebcamEnabled = true;
@@ -61,6 +68,7 @@ namespace WebcamWindows
         private bool isDisposing = false;
         private readonly object lockObject = new object();
         private bool minimizeToTrayEnabled = false;
+
 
         public MainForm()
         {
@@ -102,6 +110,7 @@ namespace WebcamWindows
 
         private async void MainForm_Load(object sender, EventArgs e)
         {
+            LoadSettings();
             await InitializeWebcamAsync();
             SetupTrayIcon();
         }
@@ -120,7 +129,27 @@ namespace WebcamWindows
                 
                 if (availableWebcams.Count > 0)
                 {
-                    StartWebcam(0); // Start with first available webcam
+                    int deviceIndex = 0;
+                    if (!string.IsNullOrEmpty(savedWebcamName))
+                    {
+                        int foundIndex = availableWebcams.IndexOf(savedWebcamName);
+                        if (foundIndex >= 0)
+                        {
+                            deviceIndex = foundIndex;
+                        }
+                    }
+                    
+                    if (isWebcamEnabled)
+                    {
+                        StartWebcam(deviceIndex);
+                    }
+                    else
+                    {
+                        currentDeviceIndex = deviceIndex;
+                        currentWebcamName = availableWebcams[deviceIndex];
+                        ShowDisabledScreen();
+                        UpdateWindowTitle(currentWebcamName);
+                    }
                 }
                 else
                 {
@@ -255,7 +284,7 @@ namespace WebcamWindows
                             {
                                 IntPtr streamConfigPtr;
                                 Guid streamConfigGuid = typeof(IAMStreamConfig).GUID;
-                                hr = Marshal.QueryInterface(Marshal.GetIUnknownForObject(outputPin), ref streamConfigGuid, out streamConfigPtr);
+                                hr = Marshal.QueryInterface(Marshal.GetIUnknownForObject(outputPin), in streamConfigGuid, out streamConfigPtr);
                                 if (hr == 0 && streamConfigPtr != IntPtr.Zero)
                                 {
                                     streamConfig = (IAMStreamConfig)Marshal.GetObjectForIUnknown(streamConfigPtr);
@@ -536,20 +565,28 @@ namespace WebcamWindows
                             
                             if (supportedResolutions.Count > 0)
                             {
-                                var smallestResolution = supportedResolutions
-                                    .OrderBy(r => r.Width * r.Height)
-                                    .First();
+                                Size targetResolution;
+                                if (savedWidth > 0 && savedHeight > 0 && supportedResolutions.Any(r => r.Width == savedWidth && r.Height == savedHeight))
+                                {
+                                    targetResolution = new Size(savedWidth, savedHeight);
+                                    System.Diagnostics.Debug.WriteLine($"Selected saved resolution: {savedWidth}x{savedHeight}");
+                                }
+                                else
+                                {
+                                    targetResolution = supportedResolutions
+                                        .OrderBy(r => r.Width * r.Height)
+                                        .First();
+                                    System.Diagnostics.Debug.WriteLine($"Auto-selected smallest resolution: {targetResolution.Width}x{targetResolution.Height}");
+                                }
                                 
-                                videoCapture.Set(VideoCaptureProperties.FrameWidth, smallestResolution.Width);
-                                videoCapture.Set(VideoCaptureProperties.FrameHeight, smallestResolution.Height);
+                                videoCapture.Set(VideoCaptureProperties.FrameWidth, targetResolution.Width);
+                                videoCapture.Set(VideoCaptureProperties.FrameHeight, targetResolution.Height);
                                 
                                 System.Threading.Thread.Sleep(100);
                                 
                                 var actualWidth = (int)videoCapture.Get(VideoCaptureProperties.FrameWidth);
                                 var actualHeight = (int)videoCapture.Get(VideoCaptureProperties.FrameHeight);
                                 currentResolution = new Size(actualWidth, actualHeight);
-                                
-                                System.Diagnostics.Debug.WriteLine($"Auto-selected smallest resolution: {actualWidth}x{actualHeight}");
                             }
                             else
                             {
@@ -560,7 +597,7 @@ namespace WebcamWindows
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Error setting smallest resolution: {ex.Message}");
+                            System.Diagnostics.Debug.WriteLine($"Error setting resolution: {ex.Message}");
                             var width = (int)videoCapture.Get(VideoCaptureProperties.FrameWidth);
                             var height = (int)videoCapture.Get(VideoCaptureProperties.FrameHeight);
                             currentResolution = new Size(width, height);
@@ -573,6 +610,7 @@ namespace WebcamWindows
                         UpdateTrayMenu();
                         ClearDisabledScreen();
                         frameTimer.Start();
+                        SaveSettings();
                         
                         System.Diagnostics.Debug.WriteLine($"Started webcam {deviceIndex}: {availableWebcams[deviceIndex]} at {currentResolution.Width}x{currentResolution.Height}");
                         
@@ -961,7 +999,7 @@ namespace WebcamWindows
                 string status = isWebcamEnabled ? string.Empty : " [DISABLED]";
                 string clock = DateTime.Now.ToString("[HH:mm:ss] ");
                 
-                this.Text = $"{clock}{baseTitle}{status}";
+                this.Text = $"{clock}{baseTitle}{status} v{version}";
             }
             catch (Exception ex)
             {
@@ -1084,6 +1122,7 @@ namespace WebcamWindows
                 }
                 
                 UpdateTrayMenu();
+                SaveSettings();
             }
         }
 
@@ -1097,6 +1136,7 @@ namespace WebcamWindows
                 UpdateWindowTitle(currentWebcamName);
                 ShowDisabledScreen();
                 UpdateTrayMenu();
+                SaveSettings();
             }
         }
 
@@ -1558,6 +1598,7 @@ namespace WebcamWindows
                 
                 UpdateTrayMenu();
                 ClearDisabledScreen();
+                SaveSettings();
             }
             finally
             {
@@ -1591,6 +1632,7 @@ namespace WebcamWindows
             
             this.TopMost = !this.TopMost;
             UpdateTrayMenu();
+            SaveSettings();
         }
 
         private void MinimizeToTrayMenuItem_Click(object sender, EventArgs e)
@@ -1599,6 +1641,7 @@ namespace WebcamWindows
             
             minimizeToTrayEnabled = !minimizeToTrayEnabled;
             UpdateTrayMenu();
+            SaveSettings();
         }
 
         private void DiagnosticsMenuItem_Click(object sender, EventArgs e)
@@ -1813,6 +1856,7 @@ namespace WebcamWindows
                 this.WindowState = FormWindowState.Normal;
                 isBorderless = true;
             }
+            SaveSettings();
         }
 
         private void ToggleFullScreen()
@@ -1835,6 +1879,7 @@ namespace WebcamWindows
                 isFullScreen = true;
             }
             UpdateTrayMenu();
+            SaveSettings();
         }
 
         // WINDOW EVENT HANDLERS
@@ -1954,6 +1999,105 @@ namespace WebcamWindows
             }
             
             base.Dispose(disposing);
+        }
+
+        private void SaveSettings()
+        {
+            if (isDisposing) return;
+            try
+            {
+                var settings = new
+                {
+                    LastWebcamName = currentWebcamName,
+                    ResolutionWidth = currentResolution.Width,
+                    ResolutionHeight = currentResolution.Height,
+                    IsWebcamEnabled = isWebcamEnabled,
+                    IsFullScreen = isFullScreen,
+                    TopMost = this.TopMost,
+                    MinimizeToTrayEnabled = minimizeToTrayEnabled,
+                    IsBorderless = isBorderless
+                };
+                string configPath = string.IsNullOrEmpty(Environment.ProcessPath) 
+                    ? System.IO.Path.Combine(AppContext.BaseDirectory, "WebcamWindows.json") 
+                    : System.IO.Path.ChangeExtension(Environment.ProcessPath, ".json");
+                string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(configPath, json, System.Text.Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
+            }
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                string configPath = string.IsNullOrEmpty(Environment.ProcessPath) 
+                    ? System.IO.Path.Combine(AppContext.BaseDirectory, "WebcamWindows.json") 
+                    : System.IO.Path.ChangeExtension(Environment.ProcessPath, ".json");
+                
+                if (System.IO.File.Exists(configPath))
+                {
+                    string json = System.IO.File.ReadAllText(configPath, System.Text.Encoding.UTF8);
+                    using (var doc = JsonDocument.Parse(json))
+                    {
+                        var root = doc.RootElement;
+                        
+                        if (root.TryGetProperty("LastWebcamName", out var nameProp))
+                        {
+                            savedWebcamName = nameProp.GetString();
+                        }
+                        
+                        if (root.TryGetProperty("ResolutionWidth", out var wProp))
+                        {
+                            savedWidth = wProp.GetInt32();
+                        }
+                        
+                        if (root.TryGetProperty("ResolutionHeight", out var hProp))
+                        {
+                            savedHeight = hProp.GetInt32();
+                        }
+                        
+                        if (root.TryGetProperty("IsWebcamEnabled", out var enabledProp))
+                        {
+                            isWebcamEnabled = enabledProp.GetBoolean();
+                        }
+                        
+                        if (root.TryGetProperty("IsFullScreen", out var fsProp))
+                        {
+                            bool shouldFullScreen = fsProp.GetBoolean();
+                            if (shouldFullScreen != isFullScreen)
+                            {
+                                ToggleFullScreen();
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("TopMost", out var tmProp))
+                        {
+                            this.TopMost = tmProp.GetBoolean();
+                        }
+                        
+                        if (root.TryGetProperty("MinimizeToTrayEnabled", out var mttProp))
+                        {
+                            minimizeToTrayEnabled = mttProp.GetBoolean();
+                        }
+                        
+                        if (root.TryGetProperty("IsBorderless", out var borderlessProp))
+                        {
+                            bool shouldBorderless = borderlessProp.GetBoolean();
+                            if (shouldBorderless != isBorderless)
+                            {
+                                ToggleWindowMode();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load settings: {ex.Message}");
+            }
         }
     }
 }
