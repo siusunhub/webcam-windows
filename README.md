@@ -85,7 +85,3 @@ So this project is a minimal viewer that:
 - **Not a virtual camera** – does not create a virtual webcam device; it just shows the real device in a window.  
 - **Device in use** – while this app has the webcam open, other apps may not be able to use the same device.
 
-
-## License
-
-Add your preferred license here (MIT, GPL, etc.).
