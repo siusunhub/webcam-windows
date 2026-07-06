@@ -3,6 +3,8 @@
 A tiny Windows tray application that shows any webcam in a clean, borderless window.  
 Originally built to use the **Blackmagic ATEM Mini Pro** USB-C output (set to Multiview) as a simple, always-visible webcam window, without all the extra UI and clutter of typical webcam/streaming software.
 
+![Screenshot](assets/screenshots.png)
+
 The app is written in C# using Windows Forms, OpenCvSharp and DirectShow.
 
 
@@ -52,6 +54,7 @@ So this project is a minimal viewer that:
     - `Full Screen`
     - `Always on Top`
     - `Minimize to Tray`
+    - `Webcam Diagnostics`
     - `Exit`
 
 - **Window modes**
@@ -65,9 +68,17 @@ So this project is a minimal viewer that:
     - Clicking the window “X” hides to tray instead of exiting
     - Double-click tray icon to restore and re-enable webcam
 
+- **Settings persistence**
+  - Automatically saves configuration options to `WebcamWindows.json` on settings change or exit.
+  - Automatically restores last active webcam, selected resolution, window modes (borderless/fullscreen), "always on top", and "minimize to tray" states on startup.
+
+- **Diagnostics & troubleshooting**
+  - Context menu item `Webcam Diagnostics` opens a dedicated diagnostics window showing OpenCV, DirectShow, and OS details, alongside active webcam status and troubleshooting advice.
+  - Enables viewing a complete table of supported pixel formats and frame rates for the selected device.
+
 - **Small touches**
-  - Current time `[HH:mm:ss]` is shown in the window title bar
-  - Title updates to include the active webcam name and “[DISABLED]” when the camera is off
+  - Current time `[HH:mm:ss]` is shown in the window title bar alongside active webcam name and version.
+  - Title updates to indicate when the camera is "[DISABLED]".
 
 
 ## Tech stack
