@@ -1,5 +1,10 @@
 # Webcam Viewer (WebcamWindows)
 
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
+[![Target Framework](https://img.shields.io/badge/.NET-10.0%20WinForms-purple.svg)](https://dotnet.microsoft.com/)
+[![Version](https://img.shields.io/badge/Version-0.3-green.svg)](https://github.com/siusunhub/webcam-windows)
+[![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+
 A tiny Windows tray application that shows any webcam in a clean, borderless window.  
 Originally built to use the **Blackmagic ATEM Mini Pro** USB-C output (set to Multiview) as a simple, always-visible webcam window, without all the extra UI and clutter of typical webcam/streaming software.
 
