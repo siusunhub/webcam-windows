@@ -2,7 +2,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
 [![Target Framework](https://img.shields.io/badge/.NET-10.0%20WinForms-purple.svg)](https://dotnet.microsoft.com/)
-[![Version](https://img.shields.io/badge/Version-0.3-green.svg)](https://github.com/siusunhub/webcam-windows)
+[![Version](https://img.shields.io/badge/Version-0.4-green.svg)](https://github.com/siusunhub/webcam-windows)
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
 A tiny Windows tray application that shows any webcam in a clean, borderless window.  
@@ -32,7 +32,7 @@ So this project is a minimal viewer that:
 
 - **Simple video window**
   - Single video panel that fills the window
-  - Black background, no extra chrome or controls over the image
+  - Configurable background, with no controls over the image
 
 - **Multi-camera support**
   - Enumerates all DirectShow video devices (e.g. ATEM, USB webcams, capture cards)
@@ -45,10 +45,10 @@ So this project is a minimal viewer that:
   - Manual selection of resolution from the `Resolution` submenu
   - Separate “Refresh Resolutions” action if devices change at runtime
 
-- **Aspect-ratio aware auto-resize**
-  - When you resize the window, after a short delay the app auto-resizes so the **client area matches the camera aspect ratio** (as closely as possible)
-  - Keeps the window inside the current screen’s working area
-  - Tries to preserve the original top-left position
+- **Resizable window and Windows Snap**
+  - Resize the bordered window or use Windows Snap to place it alongside other windows.
+  - The camera image fits the available space without cropping or distorting its aspect ratio. The window stays at the size and position you choose.
+  - Choose black, white, or a custom color for the empty space around the image using `Background Color` in the context menu. The choice is saved.
 
 - **Tray icon & context menu**
   - Always-visible tray icon with context menu:
@@ -56,6 +56,7 @@ So this project is a minimal viewer that:
     - `Resolution`
     - `Refresh Webcams`
     - `Enable / Disable Webcam`
+    - `Background Color`
     - `Full Screen`
     - `Always on Top`
     - `Minimize to Tray`
@@ -64,6 +65,7 @@ So this project is a minimal viewer that:
 
 - **Window modes**
   - **Borderless mode**: double-click the video area to toggle bordered ↔ borderless
+  - Use bordered mode for window-edge resizing and Windows Snap layouts.
   - **Full screen mode**: use `Full Screen` in tray menu (on current monitor)
   - **Always on top**: optional, via tray menu
 
@@ -75,7 +77,7 @@ So this project is a minimal viewer that:
 
 - **Settings persistence**
   - Automatically saves configuration options to `WebcamWindows.json` on settings change or exit.
-  - Automatically restores last active webcam, selected resolution, window modes (borderless/fullscreen), "always on top", and "minimize to tray" states on startup.
+  - Automatically restores last active webcam, selected resolution, background color, window modes (borderless/fullscreen), "always on top", and "minimize to tray" states on startup.
 
 - **Diagnostics & troubleshooting**
   - Context menu item `Webcam Diagnostics` opens a dedicated diagnostics window showing OpenCV, DirectShow, and OS details, alongside active webcam status and troubleshooting advice.

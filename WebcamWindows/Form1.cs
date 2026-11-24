@@ -31,13 +31,12 @@ namespace WebcamWindows
     public partial class MainForm : Form
     {
 
-        private string version = "0.3";
+        private string version = "0.4";
 
         // Core components
         private VideoCapture videoCapture;
         private Timer frameTimer;
         private Timer clockTimer;
-        private Timer autoResizeTimer;
         
         // Webcam management
         private List<string> availableWebcams;
@@ -58,11 +57,6 @@ namespace WebcamWindows
         private FormBorderStyle originalBorderStyle;
         private FormWindowState originalWindowState;
         private Rectangle originalBounds;
-        
-        // Auto-resize functionality
-        private bool isAutoResizing = false;
-        private System.Drawing.Point preResizeLocation;
-        private bool isInResizeSequence = false;
         
         // Application state
         private bool isDisposing = false;
@@ -101,11 +95,6 @@ namespace WebcamWindows
             clockTimer.Interval = 500;
             clockTimer.Tick += ClockTimer_Tick;
             clockTimer.Start();
-            
-            // Auto-resize timer (5 seconds after resize)
-            autoResizeTimer = new Timer();
-            autoResizeTimer.Interval = 5000;
-            autoResizeTimer.Tick += AutoResizeTimer_Tick;
         }
 
         private async void MainForm_Load(object sender, EventArgs e)
@@ -794,7 +783,6 @@ namespace WebcamWindows
             }
         }
 
-        // AUTO-RESIZE FUNCTIONALITY
         private void MainForm_Resize(object sender, EventArgs e)
         {
             if (isDisposing) return;
@@ -811,175 +799,6 @@ namespace WebcamWindows
                 trayIcon.Visible = true;
                 trayIcon.ShowBalloonTip(2000, "Webcam Viewer", "Application minimized to tray", ToolTipIcon.Info);
             }
-            else
-            {
-                if (!isBorderless && videoPanel != null)
-                {
-                    videoPanel.Size = this.ClientSize;
-                }
-                
-                // Trigger auto-resize timer if conditions are met
-                if (ShouldTriggerAutoResize())
-                {
-                    // Store location at the start of resize sequence
-                    if (!isInResizeSequence)
-                    {
-                        preResizeLocation = this.Location;
-                        isInResizeSequence = true;
-                        System.Diagnostics.Debug.WriteLine($"Stored pre-resize location: {preResizeLocation}");
-                    }
-                    
-                    // Ensure autoResizeTimer is initialized
-                    if (autoResizeTimer == null)
-                    {
-                        autoResizeTimer = new Timer();
-                        autoResizeTimer.Interval = 5000;
-                        autoResizeTimer.Tick += AutoResizeTimer_Tick;
-                    }
-                    
-                    // Reset timer on each resize event
-                    autoResizeTimer.Stop();
-                    autoResizeTimer.Start();
-                    System.Diagnostics.Debug.WriteLine("Auto-resize timer restarted (5 seconds from resize completion)");
-                }
-            }
-        }
-
-        private bool ShouldTriggerAutoResize()
-        {
-            return !isDisposing && 
-                   !isAutoResizing && 
-                   !isFullScreen && 
-                   !isBorderless && 
-                   isWebcamEnabled && 
-                   currentResolution.Width > 0 && 
-                   currentResolution.Height > 0;
-        }
-
-        private void AutoResizeTimer_Tick(object sender, EventArgs e)
-        {
-            autoResizeTimer.Stop();
-            
-            if (!ShouldTriggerAutoResize())
-            {
-                System.Diagnostics.Debug.WriteLine("Auto-resize cancelled - conditions not met");
-                isInResizeSequence = false;
-                return;
-            }
-            
-            try
-            {
-                isAutoResizing = true;
-                PerformAutoResize();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Auto-resize error: {ex.Message}");
-            }
-            finally
-            {
-                isAutoResizing = false;
-                isInResizeSequence = false;
-            }
-        }
-
-        private void PerformAutoResize()
-        {
-            if (currentResolution.Width <= 0 || currentResolution.Height <= 0)
-            {
-                System.Diagnostics.Debug.WriteLine("Invalid resolution for auto-resize");
-                return;
-            }
-
-            var clientSize = this.ClientSize;
-            double videoAspectRatio = (double)currentResolution.Width / currentResolution.Height;
-            double clientAspectRatio = (double)clientSize.Width / clientSize.Height;
-            
-            System.Diagnostics.Debug.WriteLine($"Video aspect ratio: {videoAspectRatio:F3}, Client aspect ratio: {clientAspectRatio:F3}");
-            
-            if (Math.Abs(videoAspectRatio - clientAspectRatio) < 0.01)
-            {
-                System.Diagnostics.Debug.WriteLine("Aspect ratios already match, no resize needed");
-                return;
-            }
-
-            Size newClientSize;
-            
-            if (videoAspectRatio > clientAspectRatio)
-            {
-                newClientSize = new Size(clientSize.Width, (int)(clientSize.Width / videoAspectRatio));
-            }
-            else
-            {
-                newClientSize = new Size((int)(clientSize.Height * videoAspectRatio), clientSize.Height);
-            }
-            
-            var currentWindowSize = this.Size;
-            var currentClientSize = this.ClientSize;
-            var chromeWidth = currentWindowSize.Width - currentClientSize.Width;
-            var chromeHeight = currentWindowSize.Height - currentClientSize.Height;
-            
-            var newWindowSize = new Size(
-                newClientSize.Width + chromeWidth,
-                newClientSize.Height + chromeHeight
-            );
-            
-            var screen = Screen.FromControl(this);
-            var workingArea = screen.WorkingArea;
-            
-            if (newWindowSize.Width > workingArea.Width || newWindowSize.Height > workingArea.Height)
-            {
-                double scaleX = (double)workingArea.Width / newWindowSize.Width;
-                double scaleY = (double)workingArea.Height / newWindowSize.Height;
-                double scale = Math.Min(scaleX, scaleY);
-                
-                newWindowSize = new Size(
-                    (int)(newWindowSize.Width * scale),
-                    (int)(newWindowSize.Height * scale)
-                );
-            }
-            
-            System.Drawing.Point newLocation;
-            
-            // Check if this is the first auto-resize or if preResizeLocation is invalid
-            if (preResizeLocation.X <= 10 && preResizeLocation.Y <= 10)
-            {
-                // First time or invalid location - center the window
-                newLocation = new System.Drawing.Point(
-                    workingArea.X + (workingArea.Width - newWindowSize.Width) / 2,
-                    workingArea.Y + (workingArea.Height - newWindowSize.Height) / 2
-                );
-                System.Diagnostics.Debug.WriteLine("First auto-resize - centering window");
-            }
-            else
-            {
-                // Try to preserve the top-left position from before resize
-                newLocation = preResizeLocation;
-                
-                // Ensure the window stays within screen bounds
-                if (newLocation.X + newWindowSize.Width > workingArea.Right)
-                {
-                    newLocation.X = workingArea.Right - newWindowSize.Width;
-                }
-                if (newLocation.Y + newWindowSize.Height > workingArea.Bottom)
-                {
-                    newLocation.Y = workingArea.Bottom - newWindowSize.Height;
-                }
-                if (newLocation.X < workingArea.Left)
-                {
-                    newLocation.X = workingArea.Left;
-                }
-                if (newLocation.Y < workingArea.Top)
-                {
-                    newLocation.Y = workingArea.Top;
-                }
-                System.Diagnostics.Debug.WriteLine($"Preserving top-left position: {newLocation}");
-            }
-            
-            System.Diagnostics.Debug.WriteLine($"Auto-resizing window from {this.Size} to {newWindowSize}");
-            System.Diagnostics.Debug.WriteLine($"Final window location: {newLocation}");
-            
-            this.SetBounds(newLocation.X, newLocation.Y, newWindowSize.Width, newWindowSize.Height);
         }
 
         // WINDOW TITLE AND STATUS
@@ -1084,7 +903,6 @@ namespace WebcamWindows
                 {
                     var oldImage = videoPanel.BackgroundImage;
                     videoPanel.BackgroundImage = null;
-                    videoPanel.BackColor = Color.Black;
                     oldImage?.Dispose();
                 }
             }
@@ -1241,6 +1059,27 @@ namespace WebcamWindows
                 enableDisableItem.Click += EnableDisableMenuItem_Click;
                 trayContextMenu.Items.Add(enableDisableItem);
 
+                ToolStripMenuItem backgroundMenu = new ToolStripMenuItem("Background Color");
+                ToolStripMenuItem blackBackgroundItem = new ToolStripMenuItem("Black") { Checked = videoPanel.BackColor.ToArgb() == Color.Black.ToArgb() };
+                blackBackgroundItem.Click += (s, e) => SetBackgroundColor(Color.Black);
+                backgroundMenu.DropDownItems.Add(blackBackgroundItem);
+                ToolStripMenuItem whiteBackgroundItem = new ToolStripMenuItem("White") { Checked = videoPanel.BackColor.ToArgb() == Color.White.ToArgb() };
+                whiteBackgroundItem.Click += (s, e) => SetBackgroundColor(Color.White);
+                backgroundMenu.DropDownItems.Add(whiteBackgroundItem);
+                ToolStripMenuItem customBackgroundItem = new ToolStripMenuItem("Custom...");
+                customBackgroundItem.Click += (s, e) =>
+                {
+                    using (var dialog = new ColorDialog { Color = videoPanel.BackColor, FullOpen = true })
+                    {
+                        if (dialog.ShowDialog(this) == DialogResult.OK)
+                        {
+                            SetBackgroundColor(dialog.Color);
+                        }
+                    }
+                };
+                backgroundMenu.DropDownItems.Add(customBackgroundItem);
+                trayContextMenu.Items.Add(backgroundMenu);
+
                 // Full Screen
                 ToolStripMenuItem fullScreenItem = new ToolStripMenuItem();
                 if (isFullScreen)
@@ -1306,6 +1145,13 @@ namespace WebcamWindows
             {
                 System.Diagnostics.Debug.WriteLine($"Error updating tray menu: {ex.Message}");
             }
+        }
+
+        private void SetBackgroundColor(Color color)
+        {
+            videoPanel.BackColor = color;
+            SaveSettings();
+            UpdateTrayMenu();
         }
 
         private void AddResolutionsToMenu(ToolStripMenuItem parentMenu)
@@ -1704,10 +1550,7 @@ namespace WebcamWindows
                 
                 diagnostics += $"\r\nFrame timer running: {frameTimer?.Enabled ?? false}\r\n";
                 diagnostics += $"Frame timer interval: {frameTimer?.Interval ?? 0}ms\r\n";
-                diagnostics += $"Auto-resize enabled: {!isAutoResizing}\r\n";
-                diagnostics += $"Auto-resize timer running: {autoResizeTimer?.Enabled ?? false}\r\n";
-                diagnostics += $"In resize sequence: {isInResizeSequence}\r\n";
-                diagnostics += $"Pre-resize location: {preResizeLocation}\r\n";
+                diagnostics += $"Background color: {videoPanel.BackColor}\r\n";
                 
                 diagnostics += "\r\n=== SYSTEM INFO ===\r\n";
                 diagnostics += $"OpenCV Version: {Cv2.GetVersionString()}\r\n";
@@ -1842,7 +1685,7 @@ namespace WebcamWindows
             if (isBorderless)
             {
                 this.FormBorderStyle = FormBorderStyle.Sizable;
-                this.MaximizeBox = false;
+                this.MaximizeBox = true;
                 this.MinimizeBox = false;
                 this.WindowState = originalWindowState;
                 this.Bounds = originalBounds;
@@ -1976,9 +1819,6 @@ namespace WebcamWindows
                     clockTimer?.Stop();
                     clockTimer?.Dispose();
                     
-                    autoResizeTimer?.Stop();
-                    autoResizeTimer?.Dispose();
-                    
                     StopWebcam();
                     
                     if (videoPanel?.BackgroundImage != null)
@@ -2015,7 +1855,8 @@ namespace WebcamWindows
                     IsFullScreen = isFullScreen,
                     TopMost = this.TopMost,
                     MinimizeToTrayEnabled = minimizeToTrayEnabled,
-                    IsBorderless = isBorderless
+                    IsBorderless = isBorderless,
+                    BackgroundColorArgb = videoPanel.BackColor.ToArgb()
                 };
                 string configPath = string.IsNullOrEmpty(Environment.ProcessPath) 
                     ? System.IO.Path.Combine(AppContext.BaseDirectory, "WebcamWindows.json") 
@@ -2043,6 +1884,11 @@ namespace WebcamWindows
                     using (var doc = JsonDocument.Parse(json))
                     {
                         var root = doc.RootElement;
+
+                        if (root.TryGetProperty("BackgroundColorArgb", out var backgroundProp))
+                        {
+                            videoPanel.BackColor = Color.FromArgb(backgroundProp.GetInt32());
+                        }
                         
                         if (root.TryGetProperty("LastWebcamName", out var nameProp))
                         {
